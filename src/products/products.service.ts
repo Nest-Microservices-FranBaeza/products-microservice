@@ -1,4 +1,5 @@
 import {
+    HttpStatus,
     Injectable,
     Logger,
     NotFoundException,
@@ -8,6 +9,7 @@ import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { PrismaClient } from '@prisma/client';
 import { PaginationDto } from 'src/common';
+import { RpcException } from '@nestjs/microservices';
 
 @Injectable()
 export class ProductsService extends PrismaClient implements OnModuleInit {
@@ -57,7 +59,10 @@ export class ProductsService extends PrismaClient implements OnModuleInit {
         });
 
         if (!product) {
-            throw new NotFoundException('Product not found');
+            throw new RpcException({
+                status: HttpStatus.BAD_REQUEST,
+                message: `Product with id ${id} not found`,
+            });
         }
 
         return product;
@@ -68,7 +73,6 @@ export class ProductsService extends PrismaClient implements OnModuleInit {
 
         const { id: __, ...data } = updateProductDto;
 
-
         return this.product.update({
             where: { id },
             data,
@@ -76,7 +80,6 @@ export class ProductsService extends PrismaClient implements OnModuleInit {
     }
 
     async remove(id: number) {
-
         await this.findOne(id);
 
         const product = await this.product.update({
@@ -87,5 +90,27 @@ export class ProductsService extends PrismaClient implements OnModuleInit {
         });
 
         return product;
+    }
+
+    async validateProducts(ids: number[]) {
+        ids = Array.from(new Set(ids));
+
+        const products = await this.product.findMany({
+            where: {
+                id: {
+                    in: ids,
+                },
+            },
+        });
+
+        if (products.length !== ids.length) {
+            this.logger.error('Some products are invalid');
+            throw new RpcException({
+                status: HttpStatus.BAD_REQUEST,
+                message: 'Some products are invalid',
+            });
+        }
+
+        return products;
     }
 }
